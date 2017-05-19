@@ -22,7 +22,7 @@ use InputPort;
 use Endpoint;
 use VirtualSource;
 use VirtualDestination;
-use PacketList;
+use PacketListRef;
 use BoxedCallback;
 use notifications::Notification;
 
@@ -35,7 +35,7 @@ impl Client {
     {
         let client_name = CFString::new(name);
         let mut client_ref: MIDIClientRef = unsafe { mem::uninitialized() };
-        let mut boxed_callback = BoxedCallback::new(callback);
+        let mut boxed_callback = BoxedCallback::new(Box::new(callback) as Box<FnMut(&Notification)>);
         let status = unsafe { MIDIClientCreate(
             client_name.as_concrete_TypeRef(),
             Some(Self::notify_proc as extern "C" fn(_, _)),
@@ -43,7 +43,7 @@ impl Client {
             &mut client_ref)
         };
         if status == 0 {
-            Ok(Client { object: Object(client_ref), callback: boxed_callback })
+            Ok(Client { object: Object(client_ref), _callback: boxed_callback })
         } else {
             Err(status)
         }
@@ -61,7 +61,7 @@ impl Client {
             &mut client_ref)
         };
         if status == 0 {
-            Ok(Client { object: Object(client_ref), callback: BoxedCallback::null() })
+            Ok(Client { object: Object(client_ref), _callback: BoxedCallback::null() })
         } else {
             Err(status)
         }
@@ -85,11 +85,11 @@ impl Client {
     /// See [MIDIInputPortCreate](https://developer.apple.com/reference/coremidi/1495225-midiinputportcreate).
     ///
     pub fn input_port<F>(&self, name: &str, callback: F) -> Result<InputPort, OSStatus>
-            where F: FnMut(&PacketList) + Send + 'static {
+            where F: FnMut(PacketListRef) + Send + 'static {
 
         let port_name = CFString::new(name);
         let mut port_ref: MIDIPortRef = unsafe { mem::uninitialized() };
-        let mut box_callback = BoxedCallback::new(callback);
+        let mut box_callback = BoxedCallback::new(Box::new(callback) as Box<FnMut(PacketListRef)>);
         let status = unsafe { MIDIInputPortCreate(
             self.object.0,
             port_name.as_concrete_TypeRef(),
@@ -100,7 +100,7 @@ impl Client {
         if status == 0 {
             Ok(InputPort {
                 port: Port { object: Object(port_ref) },
-                callback: box_callback,
+                _callback: box_callback,
             })
         } else {
             Err(status)
@@ -125,11 +125,11 @@ impl Client {
     /// See [MIDIDestinationCreate](https://developer.apple.com/reference/coremidi/1495347-mididestinationcreate).
     ///
     pub fn virtual_destination<F>(&self, name: &str, callback: F) -> Result<VirtualDestination, OSStatus>
-            where F: FnMut(&PacketList) + Send + 'static {
+            where F: FnMut(PacketListRef) + Send + 'static {
 
         let virtual_destination_name = CFString::new(name);
         let mut virtual_destination: MIDIEndpointRef = unsafe { mem::uninitialized() };
-        let mut boxed_callback = BoxedCallback::new(callback);
+        let mut boxed_callback = BoxedCallback::new(Box::new(callback) as Box<FnMut(PacketListRef)>);
         let status = unsafe { MIDIDestinationCreate(
             self.object.0,
             virtual_destination_name.as_concrete_TypeRef(),
@@ -142,7 +142,7 @@ impl Client {
                 endpoint: Endpoint {
                     object: Object(virtual_destination),
                 },
-                callback: boxed_callback,
+                _callback: boxed_callback,
             })
         } else {
             Err(status)
@@ -156,7 +156,7 @@ impl Client {
         let _ = ::std::panic::catch_unwind(|| unsafe {
             match Notification::from(&*notification_ptr) {
                 Ok(notification) => {
-                    BoxedCallback::call_from_raw_ptr(ref_con, &notification);
+                    BoxedCallback::<Box<FnMut(&Notification)>>::call_from_raw_ptr(ref_con, &notification);
                 },
                 Err(_) => {} // Skip unknown notifications
             }
@@ -169,8 +169,8 @@ impl Client {
             _: *mut ::libc::c_void) { //srcConnRefCon
 
         let _ = ::std::panic::catch_unwind(|| unsafe {
-            let packet_list = PacketList(pktlist);
-            BoxedCallback::call_from_raw_ptr(read_proc_ref_con, &packet_list);
+            let packet_list = PacketListRef::from_ptr(pktlist);
+            BoxedCallback::<Box<FnMut(PacketListRef)>>::call_from_raw_ptr(read_proc_ref_con, packet_list);
         });
     }
 }

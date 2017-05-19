@@ -49,10 +49,6 @@ use coremidi_sys::{
     MIDIObjectRef, MIDIFlushOutput, MIDIRestart
 };
 
-use coremidi_sys_ext::{
-    MIDIPacketList
-};
-
 /// A [MIDI Object](https://developer.apple.com/reference/coremidi/midiobjectref).
 ///
 /// The base class of many CoreMIDI objects.
@@ -69,20 +65,20 @@ pub struct Object(MIDIObjectRef);
 /// ```rust,no_run
 /// let client = coremidi::Client::new("example-client").unwrap();
 /// ```
-#[derive(Debug)]
 pub struct Client {
     // Order is important, object needs to be dropped first
     object: Object,
-    callback: BoxedCallback<Notification>,
+    // Never used once set but needs to stay alive.
+    _callback: BoxedCallback<Box<FnMut(&Notification)>>,
 }
 
 // A lifetime-managed wrapper for callback functions
-#[derive(Debug, PartialEq)]
-struct BoxedCallback<T>(*mut Box<FnMut(&T)>);
+#[derive(PartialEq)]
+struct BoxedCallback<T>(*mut T);
 
 impl<T> BoxedCallback<T> {
-    fn new<F: FnMut(&T) + Send + 'static>(f: F) -> BoxedCallback<T> {
-        BoxedCallback(Box::into_raw(Box::new(Box::new(f))))
+    fn new(t: T) -> BoxedCallback<T> {
+        BoxedCallback(Box::into_raw(Box::new(t)))
     }
 
     fn null() -> BoxedCallback<T> {
@@ -94,8 +90,8 @@ impl<T> BoxedCallback<T> {
     }
 
     // must not be null
-    unsafe fn call_from_raw_ptr(raw_ptr: *mut ::libc::c_void, arg: &T) {
-        let callback = &mut *(raw_ptr as *mut Box<FnMut(&T)>);
+    unsafe fn call_from_raw_ptr<X>(raw_ptr: *mut ::libc::c_void, arg: X) {
+        let callback = &mut *(raw_ptr as *mut Box<FnMut(X)>);
         callback(arg);
     }
 }
@@ -142,11 +138,11 @@ pub struct OutputPort { port: Port }
 /// let source = coremidi::Source::from_index(0);
 /// input_port.connect_source(&source);
 /// ```
-#[derive(Debug)]
 pub struct InputPort {
     // Note: the order is important here, port needs to be dropped first
     port: Port,
-    callback: BoxedCallback<PacketList>,
+    // Never used once set but needs to stay alive.
+    _callback: BoxedCallback<Box<FnMut(PacketListRef)>>,
 }
 
 /// A MIDI source or source, owned by an entity.
@@ -202,11 +198,11 @@ pub struct VirtualSource { endpoint: Endpoint }
 /// client.virtual_destination("example-destination", |packet_list| println!("{}", packet_list)).unwrap();
 /// ```
 ///
-#[derive(Debug)]
 pub struct VirtualDestination {
     // Note: the order is important here, endpoint needs to be dropped first
     endpoint: Endpoint,
-    callback: BoxedCallback<PacketList>,
+    // Never used once set but needs to stay alive.
+    _callback: BoxedCallback<Box<FnMut(PacketListRef)>>,
 }
 
 /// A [MIDI object](https://developer.apple.com/reference/coremidi/midideviceref).
@@ -216,11 +212,6 @@ pub struct VirtualDestination {
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub struct Device { object: Object }
-
-/// A [list of MIDI events](https://developer.apple.com/reference/coremidi/midipacketlist) being received from, or being sent to, one endpoint.
-///
-#[derive(PartialEq)]
-pub struct PacketList(*const MIDIPacketList);
 
 mod coremidi_sys_ext;
 
@@ -234,7 +225,7 @@ mod endpoints;
 mod notifications;
 pub use endpoints::destinations::Destinations;
 pub use endpoints::sources::Sources;
-pub use packets::{PacketListIterator, Packet, PacketBuffer};
+pub use packets::{PacketListRef, PacketListIterator, PacketRef};
 pub use properties::{Properties, PropertyGetter, PropertySetter};
 pub use notifications::Notification;
 

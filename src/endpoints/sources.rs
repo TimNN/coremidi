@@ -14,7 +14,7 @@ use Object;
 use Endpoint;
 use Source;
 use VirtualSource;
-use PacketList;
+use PacketListRef;
 
 impl Source {
     /// Create a source endpoint from its index.
@@ -94,10 +94,10 @@ impl VirtualSource {
     /// Distributes incoming MIDI from a source to the client input ports which are connected to that source.
     /// See [MIDIReceived](https://developer.apple.com/reference/coremidi/1495276-midireceived)
     ///
-    pub fn received(&self, packet_list: &PacketList) -> Result<(), OSStatus> {
+    pub fn received(&self, packet_list: PacketListRef) -> Result<(), OSStatus> {
         let status = unsafe { MIDIReceived(
             self.endpoint.object.0,
-            packet_list.0)
+            packet_list.as_ptr())
         };
         if status == 0 { Ok(()) } else { Err(status) }
     }

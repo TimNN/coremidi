@@ -17,7 +17,7 @@ use OutputPort;
 use InputPort;
 use Destination;
 use Source;
-use PacketList;
+use PacketListRef;
 
 impl Deref for Port {
     type Target = Object;
@@ -37,11 +37,11 @@ impl OutputPort {
     /// Send a list of packets to a destination.
     /// See [MIDISend](https://developer.apple.com/reference/coremidi/1495289-midisend).
     ///
-    pub fn send(&self, destination: &Destination, packet_list: &PacketList) -> Result<(), OSStatus> {
+    pub fn send(&self, destination: &Destination, packet_list: PacketListRef) -> Result<(), OSStatus> {
         let status = unsafe { MIDISend(
             self.port.object.0,
             destination.endpoint.object.0,
-            packet_list.0)
+            packet_list.as_ptr())
         };
         if status == 0 { Ok(()) } else { Err(status) }
     }
