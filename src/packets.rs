@@ -85,7 +85,19 @@ impl<'a> PacketRef<'a> {
 
     #[inline(always)]
     unsafe fn next(&self) -> PacketRef<'a> {
-        panic!()
+        let unadjusted = self.data.offset(10 + self.data_length() as isize);
+
+        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+        return PacketRef {
+            data: ((unadjusted as usize + 3) & !3) as *const _,
+            _lt: PhantomData,
+        };
+
+        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+        return PacketRef {
+            data: unadjusted,
+            _lt: PhantomData,
+        };
     }
 }
 
