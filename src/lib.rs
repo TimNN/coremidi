@@ -225,7 +225,7 @@ mod endpoints;
 mod notifications;
 pub use endpoints::destinations::Destinations;
 pub use endpoints::sources::Sources;
-pub use packets::{PacketListRef, PacketListIterator, PacketRef};
+pub use packets::{PacketBuffer, PacketListRef, PacketListIterator, PacketRef};
 pub use properties::{Properties, PropertyGetter, PropertySetter};
 pub use notifications::Notification;
 

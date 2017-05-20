@@ -3,9 +3,9 @@ use coremidi_sys_ext::{
 };
 
 use std::fmt;
+use std::marker::PhantomData;
 use std::ptr;
 use std::slice;
-use std::marker::PhantomData;
 
 pub type Timestamp = u64;
 
@@ -212,27 +212,185 @@ impl<'a> Iterator for PacketListIterator<'a> {
     }
 }
 
+pub struct PacketBuffer<T> {
+    buffer: T,
+}
+
+pub struct FixedStorage<'a> {
+    data: &'a mut [u8],
+    used: usize,
+}
+
+pub struct DynStorage {
+    data: Vec<u8>,
+}
+
+pub trait PacketBufferStorage {
+    fn ptr(&self) -> *const u8;
+
+    fn ptr_mut(&mut self) -> *mut u8;
+
+    fn request(&mut self, length: usize) -> Option<&mut [u8]>;
+}
+
+impl<'a> PacketBufferStorage for FixedStorage<'a> {
+    #[inline(always)]
+    fn ptr(&self) -> *const u8 {
+        &self.data[0] as *const _
+    }
+
+    #[inline(always)]
+    fn ptr_mut(&mut self) -> *mut u8 {
+        &mut self.data[0] as *mut _
+    }
+
+    #[inline(always)]
+    fn request(&mut self, length: usize) -> Option<&mut [u8]> {
+        if self.used + length < self.data.len() {
+            let data = &mut self.data[self.used..self.used + length];
+            self.used += length;
+            Some(data)
+        } else {
+            None
+        }
+    }
+}
+
+impl PacketBufferStorage for DynStorage {
+    #[inline(always)]
+    fn ptr(&self) -> *const u8 {
+        &self.data[0] as *const _
+    }
+
+    #[inline(always)]
+    fn ptr_mut(&mut self) -> *mut u8 {
+        &mut self.data[0] as *mut _
+    }
+
+    #[inline(always)]
+    fn request(&mut self, length: usize) -> Option<&mut [u8]> {
+        self.data.reserve(length);
+        let prev_len = self.data.len();
+        unsafe { self.data.set_len(prev_len + length); }
+        Some(&mut self.data[prev_len..])
+    }
+}
+
+impl PacketBuffer<DynStorage> {
+    #[inline(always)]
+    #[deprecated]
+    pub fn new() -> Self {
+        Self::dyn()
+    }
+
+    #[inline(always)]
+    pub fn dyn() -> Self {
+        PacketBuffer::new_with_buf(DynStorage {
+            data: vec![],
+        })
+    }
+}
+
+impl<'a> PacketBuffer<FixedStorage<'a>> {
+    #[inline(always)]
+    pub fn fixed(data: &'a mut [u8]) -> Self {
+        PacketBuffer::new_with_buf(FixedStorage {
+            data: data,
+            used: 0,
+        })
+    }
+}
+
+impl<T: PacketBufferStorage> PacketBuffer<T> {
+    #[inline(always)]
+    fn new_with_buf(mut buffer: T) -> Self {
+        {
+            let num_packets = match buffer.request(4) {
+                Some(buf) => buf,
+                None => panic!("BufferTooSmall"),
+            };
+
+            unsafe {
+                ptr::copy_nonoverlapping(&0u32 as *const _ as *const u8,
+                                         &mut num_packets[0] as *mut _, 4);
+            }
+        }
+
+        assert!(buffer.ptr() as usize % 4 == 0, "BufferMisaligned");
+
+        PacketBuffer {
+            buffer: buffer,
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_ref(&self) -> PacketListRef {
+        PacketListRef {
+            data: self.buffer.ptr(),
+            _lt: PhantomData,
+        }
+    }
+
+    #[inline(always)]
+    pub fn push_packet(&mut self, timestamp: Timestamp, packet: &[u8]) -> &mut Self {
+        assert!(packet.len() <= u16::max_value() as usize);
+
+        let req_size = 10 + packet.len();
+
+        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+        let req_size = (req_size + 3) & !3;
+
+        {
+            let req = match self.buffer.request(req_size) {
+                Some(buf) => buf,
+                None => panic!("BufferTooSmall"),
+            };
+
+            unsafe {
+                let length = packet.len() as u16;
+                ptr::copy_nonoverlapping(&timestamp as *const _ as *const u8, &mut req[0] as *mut _, 8);
+                ptr::copy_nonoverlapping(&length as *const _ as *const u8, &mut req[8] as *mut _, 2);
+                ptr::copy_nonoverlapping(&packet[0] as *const _, &mut req[10] as *mut _, packet.len());
+            }
+        }
+
+        unsafe {
+            // We assert 4 byte alignment in `::new()`
+            *(self.buffer.ptr_mut() as *mut u32) += 1;
+        }
+
+        self
+    }
+
+    #[inline(always)]
+    #[deprecated]
+    pub fn with_data(mut self, timestamp: Timestamp, data: Vec<u8>) -> Self {
+        self.push_packet(timestamp, &data);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use coremidi_sys::MIDITimeStamp;
     use coremidi_sys_ext::MIDIPacketList;
-    use PacketList;
+    use PacketListRef;
     use PacketBuffer;
 
     #[test]
     pub fn packet_buffer_new() {
-        let packet_buf = PacketBuffer::new();
-        assert_eq!(packet_buf.data.len(), 4);
-        assert_eq!(packet_buf.data, vec![0x00, 0x00, 0x00, 0x00]);
+        let packet_buf = PacketBuffer::dyn();
+        assert_eq!(packet_buf.buffer.data.len(), 4);
+        assert_eq!(packet_buf.buffer.data, vec![0x00, 0x00, 0x00, 0x00]);
     }
 
     #[test]
     pub fn packet_buffer_with_data() {
         let packet_buf = PacketBuffer::new()
             .with_data(0x0102030405060708 as MIDITimeStamp, vec![0x90u8, 0x40, 0x7f]);
-        assert_eq!(packet_buf.data.len(), 17);
+        assert_eq!(packet_buf.buffer.data.len(), 17);
         // FIXME This is platform endianess dependent
-        assert_eq!(packet_buf.data, vec![
+        assert_eq!(packet_buf.buffer.data, &[
             0x01, 0x00, 0x00, 0x00,
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
             0x03, 0x00,
@@ -242,8 +400,9 @@ mod tests {
     #[test]
     fn packet_buffer_deref() {
         let packet_buf = PacketBuffer::new();
-        let packet_list: &PacketList = &packet_buf;
-        assert_eq!(packet_list.0, &packet_buf.data[0] as *const _ as *const MIDIPacketList);
+        let packet_list: PacketListRef = packet_buf.as_ref();
+        assert_eq!(packet_list.data as *const _ as *const MIDIPacketList,
+                   &packet_buf.buffer.data[0] as *const _ as *const MIDIPacketList);
     }
 
     #[test]
@@ -253,6 +412,6 @@ mod tests {
             .with_data(0, vec![0x91u8, 0x40, 0x7f])
             .with_data(0, vec![0x80u8, 0x40, 0x7f])
             .with_data(0, vec![0x81u8, 0x40, 0x7f]);
-        assert_eq!(packet_buf.length(), 4);
+        assert_eq!(packet_buf.as_ref().length(), 4);
     }
 }
