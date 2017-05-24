@@ -19,9 +19,9 @@ let output_port = client.output_port("example-port").unwrap();
 let destination = coremidi::Destination::from_index(0);
 let note_on = coremidi::PacketBuffer::from_data(0, vec![0x90, 0x40, 0x7f]);
 let note_off = coremidi::PacketBuffer::from_data(0, vec![0x80, 0x40, 0x7f]);
-output_port.send(&destination, &note_on).unwrap();
+output_port.send(&destination, note_on.as_ref()).unwrap();
 thread::sleep(Duration::from_millis(1000));
-output_port.send(&destination, &note_off).unwrap();
+output_port.send(&destination, note_off.as_ref()).unwrap();
 ```
 
 If you are looking for a portable MIDI library then you can look into:
@@ -123,7 +123,7 @@ pub struct Port { object: Object }
 /// let output_port = client.output_port("example-port").unwrap();
 /// let destination = coremidi::Destination::from_index(0);
 /// let packets = coremidi::PacketBuffer::from_data(0, vec![0x90, 0x40, 0x7f]);
-/// output_port.send(&destination, &packets).unwrap();
+/// output_port.send(&destination, packets.as_ref()).unwrap();
 /// ```
 #[derive(Debug)]
 pub struct OutputPort { port: Port }
@@ -225,7 +225,8 @@ mod endpoints;
 mod notifications;
 pub use endpoints::destinations::Destinations;
 pub use endpoints::sources::Sources;
-pub use packets::{PacketBuffer, PacketListRef, PacketListIterator, PacketRef};
+pub use packets::{PacketBuffer, DynPacketBuffer, FixedPacketBuffer};
+pub use packets::{PacketListRef, PacketListIterator, PacketRef};
 pub use properties::{Properties, PropertyGetter, PropertySetter};
 pub use notifications::Notification;
 

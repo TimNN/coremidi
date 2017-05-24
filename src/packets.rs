@@ -65,8 +65,8 @@ impl<'a> PacketRef<'a> {
     /// The following example:
     ///
     /// ```
-    /// let packet_list = &coremidi::PacketBuffer::from_data(0, vec![0x90, 0x40, 0x7f]);
-    /// for packet in packet_list.iter() {
+    /// let packet_list = coremidi::PacketBuffer::from_data(0, vec![0x90, 0x40, 0x7f]);
+    /// for packet in packet_list.as_ref().iter() {
     ///   for byte in packet.data() {
     ///     print!(" {:x}", byte);
     ///   }
@@ -276,11 +276,22 @@ impl PacketBufferStorage for DynStorage {
     }
 }
 
+pub type DynPacketBuffer = PacketBuffer<DynStorage>;
+pub type FixedPacketBuffer<'a> = PacketBuffer<FixedStorage<'a>>;
+
 impl PacketBuffer<DynStorage> {
     #[inline(always)]
     #[deprecated]
     pub fn new() -> Self {
         Self::dyn()
+    }
+
+    #[inline(always)]
+    #[deprecated]
+    pub fn from_data(timestamp: Timestamp, data: Vec<u8>) -> Self {
+        let mut buf = Self::dyn();
+        buf.push_packet(timestamp, &data);
+        buf
     }
 
     #[inline(always)]

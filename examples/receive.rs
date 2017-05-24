@@ -11,7 +11,7 @@ fn main() {
 
     let client = coremidi::Client::new("example-client").unwrap();
 
-    let callback = |packet_list: &coremidi::PacketList| {
+    let callback = |packet_list: coremidi::PacketListRef| {
         println!("{}", packet_list);
     };
 

@@ -13,15 +13,15 @@ fn main() {
     for i in 0..10 {
         println!("[{}] Received note ...", i);
 
-        source.received(&note_on).unwrap();
+        source.received(note_on.as_ref()).unwrap();
 
         thread::sleep(Duration::from_millis(1000));
 
-        source.received(&note_off).unwrap();
+        source.received(note_off.as_ref()).unwrap();
     }
 }
 
-fn create_note_on(channel: u8, note: u8, velocity: u8) -> coremidi::PacketBuffer {
+fn create_note_on(channel: u8, note: u8, velocity: u8) -> coremidi::DynPacketBuffer {
     let data = vec![
         0x90 | (channel & 0x0f),
         note & 0x7f,
@@ -29,7 +29,7 @@ fn create_note_on(channel: u8, note: u8, velocity: u8) -> coremidi::PacketBuffer
     coremidi::PacketBuffer::from_data(0, data)
 }
 
-fn create_note_off(channel: u8, note: u8, velocity: u8) -> coremidi::PacketBuffer {
+fn create_note_off(channel: u8, note: u8, velocity: u8) -> coremidi::DynPacketBuffer {
     let data = vec![
         0x80 | (channel & 0x0f),
         note & 0x7f,

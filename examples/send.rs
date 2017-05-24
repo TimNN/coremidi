@@ -20,11 +20,11 @@ fn main() {
     for i in 0..10 {
         println!("[{}] Sending note ...", i);
 
-        output_port.send(&destination, &note_on).unwrap();
+        output_port.send(&destination, note_on.as_ref()).unwrap();
 
         thread::sleep(Duration::from_millis(1000));
 
-        output_port.send(&destination, &note_off).unwrap();
+        output_port.send(&destination, note_off.as_ref()).unwrap();
     }
 }
 
@@ -67,7 +67,7 @@ fn print_destinations() {
     }
 }
 
-fn create_note_on(channel: u8, note: u8, velocity: u8) -> coremidi::PacketBuffer {
+fn create_note_on(channel: u8, note: u8, velocity: u8) -> coremidi::DynPacketBuffer {
     let data = vec![
         0x90 | (channel & 0x0f),
         note & 0x7f,
@@ -75,7 +75,7 @@ fn create_note_on(channel: u8, note: u8, velocity: u8) -> coremidi::PacketBuffer
     coremidi::PacketBuffer::from_data(0, data)
 }
 
-fn create_note_off(channel: u8, note: u8, velocity: u8) -> coremidi::PacketBuffer {
+fn create_note_off(channel: u8, note: u8, velocity: u8) -> coremidi::DynPacketBuffer {
     let data = vec![
         0x80 | (channel & 0x0f),
         note & 0x7f,
