@@ -223,6 +223,7 @@ mod packets;
 mod properties;
 mod endpoints;
 mod notifications;
+pub use devices::Devices;
 pub use endpoints::destinations::Destinations;
 pub use endpoints::sources::Sources;
 pub use packets::{PacketBuffer, DynPacketBuffer, FixedPacketBuffer};
