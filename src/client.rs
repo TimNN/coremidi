@@ -35,7 +35,7 @@ impl Client {
     {
         let client_name = CFString::new(name);
         let mut client_ref: MIDIClientRef = unsafe { mem::uninitialized() };
-        let mut boxed_callback = BoxedCallback::new(Box::new(callback) as Box<FnMut(&Notification)>);
+        let mut boxed_callback = BoxedCallback::new(Box::new(callback) as Box<FnMut(&Notification) + Send>);
         let status = unsafe { MIDIClientCreate(
             client_name.as_concrete_TypeRef(),
             Some(Self::notify_proc as extern "C" fn(_, _)),

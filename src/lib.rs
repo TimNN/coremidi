@@ -69,12 +69,20 @@ pub struct Client {
     // Order is important, object needs to be dropped first
     object: Object,
     // Never used once set but needs to stay alive.
-    _callback: BoxedCallback<Box<FnMut(&Notification)>>,
+    _callback: BoxedCallback<Box<FnMut(&Notification) + Send>>,
+}
+
+fn _send() {
+    fn _assert<T: Send>() {}
+
+    _assert::<Client>();
 }
 
 // A lifetime-managed wrapper for callback functions
 #[derive(PartialEq)]
 struct BoxedCallback<T>(*mut T);
+
+unsafe impl<T: Send> Send for BoxedCallback<T> {}
 
 impl<T> BoxedCallback<T> {
     fn new(t: T) -> BoxedCallback<T> {
