@@ -72,10 +72,20 @@ pub struct Client {
     _callback: BoxedCallback<Box<FnMut(&Notification) + Send>>,
 }
 
-fn _send() {
-    fn _assert<T: Send>() {}
+// Object is Sync.
+// _callback will only be accessed
+//     (a) when receiving a notification (always on the thread that created the
+//         client).
+//     (b) during drop (the client was already destroyed, no new notifications
+//         should be arriving)
+unsafe impl Sync for Client {}
 
-    _assert::<Client>();
+fn _auto() {
+    fn _assert_send<T: Send>() {}
+    fn _assert_sync<T: Sync>() {}
+
+    _assert_send::<Client>();
+    _assert_sync::<Client>();
 }
 
 // A lifetime-managed wrapper for callback functions
@@ -83,6 +93,7 @@ fn _send() {
 struct BoxedCallback<T>(*mut T);
 
 unsafe impl<T: Send> Send for BoxedCallback<T> {}
+unsafe impl<T: Sync> Sync for BoxedCallback<T> {}
 
 impl<T> BoxedCallback<T> {
     fn new(t: T) -> BoxedCallback<T> {
