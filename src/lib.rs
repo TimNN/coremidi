@@ -86,6 +86,12 @@ fn _auto() {
 
     _assert_send::<Client>();
     _assert_sync::<Client>();
+
+    _assert_send::<OutputPort>();
+    _assert_sync::<OutputPort>();
+
+    _assert_send::<InputPort>();
+    _assert_sync::<InputPort>();
 }
 
 // A lifetime-managed wrapper for callback functions
@@ -161,8 +167,15 @@ pub struct InputPort {
     // Note: the order is important here, port needs to be dropped first
     port: Port,
     // Never used once set but needs to stay alive.
-    _callback: BoxedCallback<Box<FnMut(PacketListRef)>>,
+    _callback: BoxedCallback<Box<FnMut(PacketListRef) + Send>>,
 }
+
+// Port is Sync.
+// _callback will only be accessed
+//     (a) from a system-created audio thread.
+//     (b) during drop (the port was already destroyed, no new notifications
+//         should be arriving)
+unsafe impl Sync for InputPort {}
 
 /// A MIDI source or source, owned by an entity.
 /// See [MIDIEndpointRef](https://developer.apple.com/reference/coremidi/midiendpointref).

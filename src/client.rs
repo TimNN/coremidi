@@ -89,7 +89,7 @@ impl Client {
 
         let port_name = CFString::new(name);
         let mut port_ref: MIDIPortRef = unsafe { mem::uninitialized() };
-        let mut box_callback = BoxedCallback::new(Box::new(callback) as Box<FnMut(PacketListRef)>);
+        let mut box_callback = BoxedCallback::new(Box::new(callback) as Box<FnMut(PacketListRef) + Send>);
         let status = unsafe { MIDIInputPortCreate(
             self.object.0,
             port_name.as_concrete_TypeRef(),
